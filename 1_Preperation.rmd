@@ -1,0 +1,172 @@
+---
+title: "Transformation of Raw Data"
+author: "Christian Wollmann"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    number_sections: true
+    toc_depth: 2
+    theme: united
+---
+#1. Calculating Descriptives for raw data
+```{r}
+# Load necessary libraries
+library(dplyr)
+
+# Load raw data
+load("Merged_data_SAMEP_Phase5_20250212.Rda")
+
+# Filter for 20Hz online groups
+df_20hz <- memory %>%
+  filter(study_group %in% c("20Hz_online_exp", "20Hz_online_sham"))
+
+# Sample characteristics
+pn <- nrow(df_20hz) # Total number of participants
+pg <- table(df_20hz$study_group) # Number per group
+pgs <- table(df_20hz$study_group, df_20hz$sex) # By group and sex
+
+# Age descriptives
+age_M_gr <- aggregate(age ~ study_group, data = df_20hz, mean)
+age_SD_gr <- aggregate(age ~ study_group, data = df_20hz, sd)
+age_min_max <- df_20hz %>%
+  group_by(study_group) %>%
+  summarise(age_min = min(age, na.rm = TRUE), age_max = max(age, na.rm = TRUE))
+age_wilcox <- wilcox.test(age ~ study_group, data = df_20hz)
+
+# rMT descriptives
+rMT_M_gr <- aggregate(rMT ~ study_group, data = df_20hz, mean)
+rMT_SD_gr <- aggregate(rMT ~ study_group, data = df_20hz, sd)
+rMT_min_max <- df_20hz %>%
+  group_by(study_group) %>%
+  summarise(rMT_min = min(rMT, na.rm = TRUE), rMT_max = max(rMT, na.rm = TRUE))
+rMT_wilcox <- wilcox.test(rMT ~ study_group, data = df_20hz)
+
+# Memory performance (IAPS hits)
+HIT_POS_mean_gr <- aggregate(IAPS_HIT_POS ~ study_group, data = df_20hz, mean)
+HIT_POS_sd_gr <- aggregate(IAPS_HIT_POS ~ study_group, data = df_20hz, sd)
+HIT_POS_wilcox <- wilcox.test(IAPS_HIT_POS ~ study_group, data = df_20hz)
+
+HIT_NEU_mean_gr <- aggregate(IAPS_HIT_NEU ~ study_group, data = df_20hz, mean)
+HIT_NEU_sd_gr <- aggregate(IAPS_HIT_NEU ~ study_group, data = df_20hz, sd)
+HIT_NEU_wilcox <- wilcox.test(IAPS_HIT_NEU ~ study_group, data = df_20hz)
+
+HIT_NEG_mean_gr <- aggregate(IAPS_HIT_NEG ~ study_group, data = df_20hz, mean)
+HIT_NEG_sd_gr <- aggregate(IAPS_HIT_NEG ~ study_group, data = df_20hz, sd)
+HIT_NEG_wilcox <- wilcox.test(IAPS_HIT_NEG ~ study_group, data = df_20hz)
+
+# Overall memory performance
+df_20hz_manual <- df_20hz %>%
+  rowwise() %>%
+  mutate(mem_sum_manual = sum(c_across(c(IAPS_HIT_NEG, IAPS_HIT_NEU, IAPS_HIT_POS)), na.rm = TRUE)) %>%
+  ungroup()
+
+mem_summary_manual <- df_20hz_manual %>%
+  group_by(study_group) %>%
+  summarise(mean_mem_sum = mean(mem_sum_manual, na.rm = TRUE),
+            sd_mem_sum = sd(mem_sum_manual, na.rm = TRUE),
+            n = n(),
+            .groups = "drop")
+wilcox_mem_manual <- wilcox.test(mem_sum_manual ~ study_group, data = df_20hz_manual)
+
+# Valence ratings
+valence_neg_mean_gr <- aggregate(mean_valence_rating_neg_1 ~ study_group, data = df_20hz, mean)
+valence_neg_sd_gr <- aggregate(mean_valence_rating_neg_1 ~ study_group, data = df_20hz, sd)
+valence_neg_wilcox <- wilcox.test(mean_valence_rating_neg_1 ~ study_group, data = df_20hz)
+
+valence_neu_mean_gr <- aggregate(mean_valence_rating_neu_1 ~ study_group, data = df_20hz, mean)
+valence_neu_sd_gr <- aggregate(mean_valence_rating_neu_1 ~ study_group, data = df_20hz, sd)
+valence_neu_wilcox <- wilcox.test(mean_valence_rating_neu_1 ~ study_group, data = df_20hz)
+
+valence_pos_mean_gr <- aggregate(mean_valence_rating_pos_1 ~ study_group, data = df_20hz, mean)
+valence_pos_sd_gr <- aggregate(mean_valence_rating_pos_1 ~ study_group, data = df_20hz, sd)
+valence_pos_wilcox <- wilcox.test(mean_valence_rating_pos_1 ~ study_group, data = df_20hz)
+
+# Output (basic summaries printed for review)
+pn
+pg
+pgs
+
+age_M_gr
+age_SD_gr
+age_min_max
+age_wilcox
+
+rMT_M_gr
+rMT_SD_gr
+rMT_min_max
+rMT_wilcox
+
+HIT_POS_mean_gr
+HIT_POS_sd_gr
+HIT_POS_wilcox
+
+HIT_NEU_mean_gr
+HIT_NEU_sd_gr
+HIT_NEU_wilcox
+
+HIT_NEG_mean_gr
+HIT_NEG_sd_gr
+HIT_NEG_wilcox
+
+mem_summary_manual
+wilcox_mem_manual
+
+valence_neg_mean_gr
+valence_neg_sd_gr
+valence_neg_wilcox
+
+valence_neu_mean_gr
+valence_neu_sd_gr
+valence_neu_wilcox
+
+valence_pos_mean_gr
+valence_pos_sd_gr
+valence_pos_wilcox
+
+```
+
+
+#2. Data Preprocessing: Wide to long format
+```{r}
+library(dplyr)
+library(tidyr)
+
+# Long-Format Transformation for Memory and Valence Ratings
+df_long <- df_20hz %>%
+  pivot_longer(
+    cols = c(IAPS_HIT_NEG, IAPS_HIT_NEU, IAPS_HIT_POS,
+             mean_valence_rating_neg_1, mean_valence_rating_neu_1, mean_valence_rating_pos_1),
+    names_to = "key",
+    values_to = "value"
+  ) %>%
+  mutate(
+    val_cat = case_when(
+      grepl("NEG", key, ignore.case = TRUE) ~ "neg",
+      grepl("NEU", key, ignore.case = TRUE) ~ "neu",
+      grepl("POS", key, ignore.case = TRUE) ~ "pos"
+    ),
+    var_type = case_when(
+      grepl("IAPS_HIT", key) ~ "mem",
+      grepl("valence_rating", key) ~ "val"
+    )
+  ) %>%
+  select(VP_nr, study_group, age, sex, rMT, val_cat, var_type, value) %>%
+  pivot_wider(names_from = var_type, values_from = value) %>%
+  rename(
+    subj = VP_nr,
+    gr = study_group
+  ) %>%
+  select(subj, val_cat, mem, val, gr, age, sex, rMT)
+
+# Define correct factor levels
+df_long$val_cat <- factor(df_long$val_cat, levels = c("neg", "neu", "pos"))
+df_long$gr <- factor(df_long$gr, levels = c("20Hz_online_exp", "20Hz_online_sham"))
+
+# Check levels
+levels(df_long$gr)
+levels(df_long$val_cat)
+
+# Save the long-format dataframe as CSV
+write.csv(df_long, file = "df_long.csv", row.names = FALSE)
+```
