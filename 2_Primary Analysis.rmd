@@ -1,0 +1,323 @@
+
+# -----------------------------------------
+# 0. Loading Primary Dataset
+# -----------------------------------------
+
+## Load long-format data
+df_primary <- read.csv("df_long.csv")
+
+## Factorizing variables
+df_primary$val_cat <- factor(df_primary$val_cat, levels = c("neg", "neu", "pos"))
+df_primary$gr <- factor(df_primary$gr, levels = c("20Hz_online_exp", "20Hz_online_sham"))
+
+# -----------------------------------------
+# 1. Specifying Models
+# -----------------------------------------
+
+## Model Specification
+p1 <- lmer(mem ~ gr * val_cat + (1|subj), data = df_primary)
+p2 <- lmer(mem ~ gr * val_cat + age + sex + (1|subj), data = df_primary)
+p3 <- lmer(mem ~ gr * val_cat + age + sex + rMT + (1|subj), data = df_primary)
+
+# -----------------------------------------
+# 1.1 Plotting Dependent Variable
+# -----------------------------------------
+
+## Figure for Memory (H1)
+m <- ggplot(df_primary, aes(x = val_cat, y = mem, fill = gr)) +
+  stat_summary(fun = mean, geom = "bar", position = position_dodge(width = 1), alpha = 0.5, color = "black") +
+  stat_summary(fun.data = mean_cl_normal, geom = "errorbar", position = position_dodge(width = 1), width = 0.2, color = "black") +
+  scale_fill_manual(values = c("20Hz_online_exp" = "#0072B2", "20Hz_online_sham" = "#D55E00"), labels = c("experimental", "control"), name = "Group") +
+  scale_x_discrete(labels = c("neg" = "negative", "neu" = "neutral", "pos" = "positive")) +
+  labs(x = "", y = "", fill = "") +
+  theme_minimal() +
+  theme(legend.title = element_text(hjust = 0.5))
+m
+
+# -----------------------------------------
+# 2. Verifying Assumptions
+# -----------------------------------------
+
+# -----------------------------------------
+# 2.1 Univariate Outliers
+# -----------------------------------------
+
+## Visualization
+g1 <- ggplot(df_primary, aes(x = "", y = mem)) +  
+  stat_boxplot(geom = "errorbar", width = 0.6, color = "black", alpha = 0.5, linewidth = 0.3) +
+  geom_boxplot(fill = "grey", color = "black", alpha = 0.5, linewidth = 0.3, outlier.size = 2, outlier.shape = 8) +
+  geom_jitter(aes(color = gr), width = 0.3, height = 0, alpha = 0.8) +
+  scale_color_manual(values = c("20Hz_online_exp" = "#0072B2", "20Hz_online_sham" = "#D55E00"), labels = c("experimental", "control"), name = "Group") +
+  scale_y_continuous(limits = c(0, 15)) +
+  labs(x = NULL, y = NULL) +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 10), legend.title = element_text(size = 10, hjust = 0.5), legend.text = element_text(size = 9), panel.grid.minor = element_blank(), panel.grid.major.x = element_blank(), axis.line = element_line(color = "black", linewidth = 0.5))
+g1
+
+## Quantification
+Q1 <- quantile(df_primary$mem, 0.25, na.rm = TRUE)
+Q3 <- quantile(df_primary$mem, 0.75, na.rm = TRUE)
+IQR_value <- IQR(df_primary$mem, na.rm = TRUE)
+lower_bound <- Q1 - 1.5 * IQR_value
+upper_bound <- Q3 + 1.5 * IQR_value
+outliers <- df_primary %>% filter(mem < lower_bound | mem > upper_bound)
+outliers
+
+# -----------------------------------------
+# 2.2 Multivariate Outliers - Cook's Distance
+# -----------------------------------------
+
+## Influence
+inf_p1 <- influence(p1, obs = TRUE)
+inf_p2 <- influence(p2, obs = TRUE)
+inf_p3 <- influence(p3, obs = TRUE)
+
+## Cook's Distance
+cd_p1 <- cooks.distance(inf_p1)
+cd_p2 <- cooks.distance(inf_p2)
+cd_p3 <- cooks.distance(inf_p3)
+
+## Critical thresholds
+critical_threshold <- 1
+conservative_threshold <- 4 / nrow(df_primary)
+
+## Function for analysis
+analyze_cooks_distance <- function(cd, model_name) {
+  critical_points <- which(cd > critical_threshold)
+  conservative_points <- which(cd > conservative_threshold)
+  cat(paste("\n--- Cook's Distance Analysis for", model_name, "---\n"))
+  if (length(critical_points) > 0) {
+    cat("Critical Points (CD > 1):\n")
+    print(critical_points)
+  } else {
+    cat("No Points (CD > 1).\n")
+  }
+  if (length(conservative_points) > 0) {
+    cat("Conservative Points (CD > 4/N):\n")
+    print(conservative_points)
+  } else {
+    cat("No Points (CD > 4/N).\n")
+  }
+}
+
+## Apply to models
+analyze_cooks_distance(cd_p1, "p1")
+analyze_cooks_distance(cd_p2, "p2")
+analyze_cooks_distance(cd_p3, "p3")
+
+
+# -----------------------------------------
+# 2.3 Multicollinearity
+# -----------------------------------------
+
+## Variance Inflation Factors (VIF)
+check_collinearity(p1)
+check_collinearity(p2)
+check_collinearity(p3)
+
+# -----------------------------------------
+# 2.4 Normal Distribution of Errors
+# -----------------------------------------
+
+## Standardized Residuals
+df_primary$residuals_p1 <- resid(p1)
+df_primary$residuals_p2 <- resid(p2)
+df_primary$residuals_p3 <- resid(p3)
+
+df_primary$stand_resid_p1 <- scale(df_primary$residuals_p1)[, 1]
+df_primary$stand_resid_p2 <- scale(df_primary$residuals_p2)[, 1]
+df_primary$stand_resid_p3 <- scale(df_primary$residuals_p3)[, 1]
+
+## Kernel Density Estimates (KDE)
+p1_density <- data.frame(x = density(df_primary$stand_resid_p1)$x, y = density(df_primary$stand_resid_p1)$y, type = "Empirical Density")
+p2_density <- data.frame(x = density(df_primary$stand_resid_p2)$x, y = density(df_primary$stand_resid_p2)$y, type = "Empirical Density")
+p3_density <- data.frame(x = density(df_primary$stand_resid_p3)$x, y = density(df_primary$stand_resid_p3)$y, type = "Empirical Density")
+
+p1_normal <- data.frame(x = seq(min(df_primary$stand_resid_p1), max(df_primary$stand_resid_p1), length.out = 100), y = dnorm(seq(min(df_primary$stand_resid_p1), max(df_primary$stand_resid_p1), length.out = 100)), type = "Normal Distribution")
+p2_normal <- data.frame(x = seq(min(df_primary$stand_resid_p2), max(df_primary$stand_resid_p2), length.out = 100), y = dnorm(seq(min(df_primary$stand_resid_p2), max(df_primary$stand_resid_p2), length.out = 100)), type = "Normal Distribution")
+p3_normal <- data.frame(x = seq(min(df_primary$stand_resid_p3), max(df_primary$stand_resid_p3), length.out = 100), y = dnorm(seq(min(df_primary$stand_resid_p3), max(df_primary$stand_resid_p3), length.out = 100)), type = "Normal Distribution")
+
+## P1: Histograms and QQ-Plots
+p1_lines <- rbind(p1_density, p1_normal)
+
+p1_hist <- ggplot(df_primary, aes(x = stand_resid_p1)) +
+  geom_histogram(aes(y = ..density..), fill = "grey", color = "#000000", binwidth = 0.25) +
+  geom_line(data = p1_lines, aes(x = x, y = y, color = type), linewidth = 1) +
+  scale_color_manual(name = "Line Type", values = c("Empirical Density" = "#CC79A7", "Normal Distribution" = "#F0E442")) +
+  theme_minimal() +
+  theme(legend.title = element_text(hjust = 0.5))
+p1_hist
+
+df_primary$theoretical_quantiles_p1 <- qqnorm(df_primary$stand_resid_p1, plot.it = FALSE)$x
+
+p1_qq <- ggplot(df_primary, aes(x = theoretical_quantiles_p1, y = stand_resid_p1, color = gr)) +
+  geom_jitter(width = 0.3, height = 0, size = 1.5, alpha = 0.7) +
+  geom_abline(intercept = mean(df_primary$stand_resid_p1), slope = sd(df_primary$stand_resid_p1), color = "#CC79A7", linewidth = 1) +
+  scale_color_manual(values = c("20Hz_online_exp" = "#0072B2", "20Hz_online_sham" = "#D55E00"), labels = c("experimental", "control"), name = "Group") +
+  theme_minimal() +
+  theme(legend.title = element_text(hjust = 0.5))
+p1_qq
+
+## P1: Normality Tests
+shapiro_residuals_p1 <- shapiro.test(df_primary$residuals_p1)
+ad_residuals_p1 <- ad.test(df_primary$residuals_p1)
+shapiro_residuals_p1
+ad_residuals_p1
+
+## (Analog: P2 und P3 --> Histogramm, QQ-Plot und Normality Test für p2 und p3)
+
+# -----------------------------------------
+# 2.5 Variance Homogeneity
+# -----------------------------------------
+
+## Residuals vs Fitted Values Plots
+df_primary$fitted_p1 <- fitted(p1)
+df_primary$fitted_p2 <- fitted(p2)
+df_primary$fitted_p3 <- fitted(p3)
+
+var_p1 <- ggplot(df_primary, aes(x = fitted_p1, y = residuals_p1, color = gr)) +
+  geom_point(size = 2, alpha = 0.7) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+  geom_smooth(method = "loess", se = FALSE, color = "#CC79A7", linewidth = 1) +
+  theme_minimal() +
+  theme(legend.title = element_text(hjust = 0.5))
+var_p1
+
+var_p2 <- ggplot(df_primary, aes(x = fitted_p2, y = residuals_p2, color = gr)) +
+  geom_point(size = 2, alpha = 0.7) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+  geom_smooth(method = "loess", se = FALSE, color = "#CC79A7", linewidth = 1) +
+  theme_minimal() +
+  theme(legend.title = element_text(hjust = 0.5))
+var_p2
+
+var_p3 <- ggplot(df_primary, aes(x = fitted_p3, y = residuals_p3, color = gr)) +
+  geom_point(size = 2, alpha = 0.7) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+  geom_smooth(method = "loess", se = FALSE, color = "#CC79A7", linewidth = 1) +
+  theme_minimal() +
+  theme(legend.title = element_text(hjust = 0.5))
+var_p3
+
+## Formal Variance Tests
+bp_p1 <- check_heteroscedasticity(p1)
+bp_p2 <- check_heteroscedasticity(p2)
+bp_p3 <- check_heteroscedasticity(p3)
+
+bp_p1
+bp_p2
+bp_p3
+
+# -----------------------------------------
+# 3. Inferential Analysis
+# -----------------------------------------
+
+# -----------------------------------------
+# 3.1 Model Fit
+# -----------------------------------------
+
+model_list <- list(p1, p2, p3)
+model_names <- c("P1", "P2", "P3")
+
+model_comparison <- data.frame(
+  Model = model_names,
+  AIC = sapply(model_list, AIC),
+  BIC = sapply(model_list, BIC)
+)
+
+model_comparison
+
+
+# -----------------------------------------
+# 3.2 Model Results
+# -----------------------------------------
+
+## Results P1
+summary(p1)
+model_parameters(p1, ci = 0.95)
+
+### Effect Sizes P1
+set.seed(123)
+boot_p1_results <- bootMer(p1, FUN = function(model) r2beta(model, method = "nsj")$Rsq, nsim = 1000, use.u = TRUE, type = "parametric")
+boot_r2_means_p1 <- apply(boot_p1_results$t, 2, mean)
+boot_r2_cis_p1 <- apply(boot_p1_results$t, 2, quantile, probs = c(0.025, 0.975))
+
+boot_p1_summary <- data.frame(
+  Effect = r2beta(p1, method = "nsj")$Effect,
+  Boot_R2 = round(boot_r2_means_p1, 4),
+  CI_Lower = round(boot_r2_cis_p1[1, ], 4),
+  CI_Upper = round(boot_r2_cis_p1[2, ], 4)
+)
+
+boot_p1_summary
+
+### Interaction Plot P1
+emm_p1 <- emmeans(p1, ~ gr * val_cat)
+emm_df_p1 <- as.data.frame(emm_p1)
+
+plot_p1 <- ggplot(emm_df_p1, aes(x = val_cat, y = emmean, color = gr, group = gr)) +
+  geom_line(linewidth = 1, position = position_dodge(0.3)) +
+  geom_point(size = 3, position = position_dodge(0.3)) +
+  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), width = 0.15, position = position_dodge(0.3)) +
+  scale_x_discrete(labels = c("neg" = "Negative", "neu" = "Neutral", "pos" = "Positive")) +
+  scale_color_manual(values = c("20Hz_online_exp" = "#0072B2", "20Hz_online_sham" = "#D55E00"), 
+                     labels = c("experimental", "control"), 
+                     name = "Group") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 11),
+    legend.title = element_text(size = 12),
+    legend.title.align = 0.5,
+    legend.text = element_text(size = 10)
+  )
+
+plot_p1
+
+# -----------------------------------------
+
+## Results P2
+summary(p2)
+model_parameters(p2, ci = 0.95)
+
+### Effect Sizes P2
+set.seed(123)
+boot_p2_results <- bootMer(p2, FUN = function(model) r2beta(model, method = "nsj")$Rsq, nsim = 1000, use.u = TRUE, type = "parametric")
+boot_r2_means_p2 <- apply(boot_p2_results$t, 2, mean)
+boot_r2_cis_p2 <- apply(boot_p2_results$t, 2, quantile, probs = c(0.025, 0.975))
+
+boot_p2_summary <- data.frame(
+  Effect = r2beta(p2, method = "nsj")$Effect,
+  Boot_R2 = round(boot_r2_means_p2, 4),
+  CI_Lower = round(boot_r2_cis_p2[1, ], 4),
+  CI_Upper = round(boot_r2_cis_p2[2, ], 4)
+)
+
+boot_p2_summary
+
+# -----------------------------------------
+
+## Results P3
+summary(p3)
+model_parameters(p3, ci = 0.95)
+
+### Effect Sizes P3
+set.seed(123)
+boot_p3_results <- bootMer(p3, FUN = function(model) r2beta(model, method = "nsj")$Rsq, nsim = 1000, use.u = TRUE, type = "parametric")
+boot_r2_means_p3 <- apply(boot_p3_results$t, 2, mean)
+boot_r2_cis_p3 <- apply(boot_p3_results$t, 2, quantile, probs = c(0.025, 0.975))
+
+boot_p3_summary <- data.frame(
+  Effect = r2beta(p3, method = "nsj")$Effect,
+  Boot_R2 = round(boot_r2_means_p3, 4),
+  CI_Lower = round(boot_r2_cis_p3[1, ], 4),
+  CI_Upper = round(boot_r2_cis_p3[2, ], 4)
+)
+
+boot_p3_summary
+
+
+
+
+
