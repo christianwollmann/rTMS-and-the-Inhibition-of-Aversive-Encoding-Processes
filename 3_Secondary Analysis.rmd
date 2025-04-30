@@ -9,30 +9,50 @@ output:
     toc_depth: 2
     theme: united
 ---
-# =========================================
-# 1 Specifying Models
-# =========================================
 
-## 1.1 Creating df_secondary for secondary analysis
+0. Reading in required packages
+```{r}
+library(tidyverse) 
+library(car)
+library(DT)
+library(dplyr)
+library(tidyr)
+library(lme4)
+library(ggplot2)
+library(influence.ME)
+library(patchwork)
+library(performance)
+library(nortest)
+library(parameters)
+library(emmeans)
+library(boot)
+library(r2glmm)
+library(clubSandwich)
+library(knitr)
+```
+
+1. Model Specification
+
+1.1 Reading in Data
+```{r}
 df_secondary <- read.csv("df_long.csv")
 
-# val_cat direkt faktorisieren (geordnet: neg < neu < pos)
-df_secondary$val_cat <- factor(df_secondary$val_cat, levels = c("neg", "neu", "pos"))
 
-# gr direkt faktorisieren (exp = 0, sham = 1)
+df_secondary$val_cat <- factor(df_secondary$val_cat, levels = c("neg", "neu", "pos")) 
 df_secondary$gr <- factor(df_secondary$gr, levels = c("20Hz_online_exp", "20Hz_online_sham"))
+```
 
-## 1.2 Specification of Models
+1.2 Specification of lme4-models
+```{r}
 s1 <- lmer(val ~ gr * val_cat + (1|subj), data = df_secondary)
+
 s2 <- lmer(val ~ gr * val_cat + age + sex + (1|subj), data = df_secondary)
-s3 <- lmer(val ~ gr * val_cat + age + sex + rMT + (1|subj), data = df_secondary)
 
+s3 <- lmer(val ~ gr * val_cat + age + sex + rMT+ (1|subj), data = df_secondary)
+```
 
-# =========================================
-# 1.3 Plotting Dependent Variable (DV)
-# =========================================
-
-## Figure for val (Secondary DV)
+1.3 Distribution of DV
+```{r}
 v <- ggplot(df_secondary, aes(x = val_cat, y = val, fill = gr)) +
   stat_summary(fun = mean, geom = "bar", 
                position = position_dodge(width = 1), 
@@ -43,48 +63,50 @@ v <- ggplot(df_secondary, aes(x = val_cat, y = val, fill = gr)) +
                width = 0.2, color = "black") +
   scale_fill_manual(values = c("20Hz_online_exp" = "#0072B2",
                                "20Hz_online_sham" = "#D55E00"),
-                    labels = c("experimental", "control"),
-                    name = "Group") +
+               labels = c("experimental", "control"),
+               name = "Group") +
   scale_x_discrete(labels = c("neg" = "negative", 
                               "neu" = "neutral", 
                               "pos" = "positive")) +
   labs(x = "", y = "", fill = "") +
   theme_minimal() +
-  theme(legend.title = element_text(hjust = 0.5))
+  theme(legend.title = element_text(hjust = 0.5)) 
 v
+```
 
-# =========================================
-# 2 Verifying Assumptions
-# =========================================
+2. Verifying assumptions
 
-# =========================================
-# 2.1 Univariate Outliers
-# =========================================
+2.1 Univariate outliers
 
-## Visualization of Univariate Outliers
+visualization
+```{r}
 g2 <- ggplot(df_secondary, aes(x = "", y = val)) +  
   stat_boxplot(geom = "errorbar", width = 0.6, color = "black", alpha = 0.5, lwd = 0.3) +
   geom_boxplot(fill = "grey", color = "black", alpha = 0.5, lwd = 0.3, outlier.size = 2, outlier.shape = 8) +  
   geom_jitter(aes(color = gr), width = 0.3, height = 0, alpha = 0.8) +  
   scale_color_manual(
-    values = c("20Hz_online_exp" = "#0072B2", "20Hz_online_sham" = "#D55E00"),
+    values = c("20Hz_online_exp" = "#0072B2", 
+               "20Hz_online_sham" = "#D55E00"),
     labels = c("experimental", "control"),
     name = "Group"
   ) +
   scale_y_continuous(limits = c(-200, 200)) +
-  labs(x = NULL, y = NULL, title = NULL) +
+  labs(x = NULL, y = NULL, title = NULL) +  
   theme_minimal() +
   theme(
     axis.text.y = element_text(size = 10),
     legend.title = element_text(size = 10, hjust = 0.5),
     legend.text = element_text(size = 9),
-    panel.grid.minor = element_blank(),
+    panel.grid.minor = element_blank(), 
     panel.grid.major.x = element_blank(),
     axis.line = element_line(color = "black", linewidth = 0.5)
   )
-g2
 
-## Quantification of Univariate Outliers
+g2
+```
+
+quantification
+```{r}
 Q1_val <- quantile(df_secondary$val, 0.25, na.rm = TRUE)
 Q3_val <- quantile(df_secondary$val, 0.75, na.rm = TRUE)
 IQR_val <- IQR(df_secondary$val, na.rm = TRUE)
@@ -96,13 +118,13 @@ outliers_val <- df_secondary %>%
   filter(val < lower_bound_val | val > upper_bound_val)
 
 outliers_val
+```
 
+2.2 Multivariate Outliers: Cooks Distance
 
-# =========================================
-# 2.2 Multivariate Outliers (Cook's Distance)
-# =========================================
-
-## Quantification of Cook's Distance
+quantification
+```{r}
+#cd based on influential cases
 inf_s1 <- influence(s1, obs = TRUE)
 inf_s2 <- influence(s2, obs = TRUE)
 inf_s3 <- influence(s3, obs = TRUE)
@@ -111,7 +133,7 @@ cd_s1 <- cooks.distance(inf_s1)
 cd_s2 <- cooks.distance(inf_s2)
 cd_s3 <- cooks.distance(inf_s3)
 
-## Influential Cases
+#find observations exceeding thresholds
 critical_threshold <- 1
 conservative_threshold <- 4 / nrow(df_secondary)
 
@@ -138,9 +160,9 @@ analyze_cooks_distance <- function(cd, model_name) {
 
 analyze_cooks_distance(cd_s1, "s1")
 analyze_cooks_distance(cd_s2, "s2")
-analyze_cooks_distance(cd_s3, "s3")
+analyze_cooks_distance(cd_s3, "s3"))
 
-## Mapping between index and subject
+#mapping observations and subject
 cd4n_s1 <- c(6, 36, 45)
 cd4n_s2 <- c(4, 6, 36, 40, 45)
 cd4n_s3 <- c(4, 6, 36, 45, 63)
@@ -158,129 +180,206 @@ cat("subj IDs:", subj_cd4n_s2, "\n")
 cat("\n--- Cook's Distance > 4/N: s3 ---\n")
 cat("subj IDs:", subj_cd4n_s3, "\n")
 
-## Visualization of Cook's Distance
+```
+
+visualization
+```{r}
 y_threshold_sec <- 4 / nrow(df_secondary)
 y_limit_sec <- range(c(cd_s1, cd_s2, cd_s3, y_threshold_sec), na.rm = TRUE)
 
 par(mfrow = c(1, 3), mai = c(0.5, 0.6, 0.3, 0.25), oma = c(3, 0, 0, 0))
-
-# PLOT 1: s1
-plot(cd_s1, type = "h", main = "", ylab = "", xlab = "", ylim = y_limit_sec, cex.lab = 1.2, col = "black")
+#S1
+plot(cd_s1, type = "h", main = "", 
+     ylab = "", xlab = "", ylim = y_limit_sec, cex.lab = 1.2, col = "black")
 abline(h = 1, col = "#0072B2", lty = 2)
 abline(h = y_threshold_sec, col = "#CC79A7", lty = 2)
 segments(x0 = cd4n_s1, y0 = 0, x1 = cd4n_s1, y1 = cd_s1[cd4n_s1], col = "red", lwd = 1)
-
-# PLOT 2: s2
-plot(cd_s2, type = "h", main = "", ylab = "", xlab = "", ylim = y_limit_sec, cex.lab = 1.2, col = "black")
+#S2
+plot(cd_s2, type = "h", main = "", 
+     ylab = "", xlab = "", ylim = y_limit_sec, cex.lab = 1.2, col = "black")
 abline(h = 1, col = "#0072B2", lty = 2)
 abline(h = y_threshold_sec, col = "#CC79A7", lty = 2)
 segments(x0 = cd4n_s2, y0 = 0, x1 = cd4n_s2, y1 = cd_s2[cd4n_s2], col = "red", lwd = 1)
 
-# PLOT 3: s3
-plot(cd_s3, type = "h", main = "", ylab = "", xlab = "", ylim = y_limit_sec, cex.lab = 1.2, col = "black")
+#S3
+plot(cd_s3, type = "h", main = "", 
+     ylab = "", xlab = "", ylim = y_limit_sec, cex.lab = 1.2, col = "black")
 abline(h = 1, col = "#0072B2", lty = 2)
 abline(h = y_threshold_sec, col = "#CC79A7", lty = 2)
 segments(x0 = cd4n_s3, y0 = 0, x1 = cd4n_s3, y1 = cd_s3[cd4n_s3], col = "red", lwd = 1)
 
 mtext("Observation Index", side = 1, line = 1.5, outer = TRUE, cex = par("cex.lab"))
+
 par(mfrow = c(1, 1))
+```
 
-# =========================================
-# 2.3 Multicollinearity
-# =========================================
+looking at subject variable combinations in raw dataset
+```{r}
+unique_subjects <- unique(c(subj_cd4n_s1, subj_cd4n_s2, subj_cd4n_s3))
 
-## Checking Variance Inflation Factors (VIF)
+unique_subjects <- sort(unique_subjects)
+unique_subjects
+df_20hz %>% filter(VP_nr %in% c(207, 217, 220, 221))
+```
 
+
+
+2.3 Multicollinearity
+quantification: VIF
+```{r}
 check_collinearity(s1)
 check_collinearity(s2)
 check_collinearity(s3)
+```
 
-
-# =========================================
-# 2.4 Normal Distribution of Errors
-# =========================================
-
-## Calculation of Standardized Residuals
-
-# Compute raw residuals
+2.4 Normal distribution of errors
+calculate standardized residuals
+```{r}
 df_secondary$resid_s1 <- resid(s1)
 df_secondary$resid_s2 <- resid(s2)
 df_secondary$resid_s3 <- resid(s3)
 
-# Compute standardized residuals
 df_secondary$stand_resid_s1 <- scale(df_secondary$resid_s1)[, 1]
 df_secondary$stand_resid_s2 <- scale(df_secondary$resid_s2)[, 1]
 df_secondary$stand_resid_s3 <- scale(df_secondary$resid_s3)[, 1]
+```
 
-
-## Preparing Kernel Density Estimation (KDE) and Normal Distributions
-
-# s1
+preparing density distribution and KDE for plotting
+```{r}
+# KDE
 s1_density <- data.frame(
   x = density(df_secondary$stand_resid_s1)$x,
   y = density(df_secondary$stand_resid_s1)$y,
   type = "Empirical Density"
 )
+
+s2_density <- data.frame(
+  x = density(df_secondary$stand_resid_s2)$x,
+  y = density(df_secondary$stand_resid_s2)$y,
+  type = "Empirical Density"
+)
+
+s3_density <- data.frame(
+  x = density(df_secondary$stand_resid_s3)$x,
+  y = density(df_secondary$stand_resid_s3)$y,
+  type = "Empirical Density"
+)
+
+#normal distribution
 s1_normal <- data.frame(
   x = seq(min(df_secondary$stand_resid_s1), max(df_secondary$stand_resid_s1), length.out = 100),
   y = dnorm(seq(min(df_secondary$stand_resid_s1), max(df_secondary$stand_resid_s1), length.out = 100)),
   type = "Normal Distribution"
 )
 
-# s2
-s2_density <- data.frame(
-  x = density(df_secondary$stand_resid_s2)$x,
-  y = density(df_secondary$stand_resid_s2)$y,
-  type = "Empirical Density"
-)
 s2_normal <- data.frame(
   x = seq(min(df_secondary$stand_resid_s2), max(df_secondary$stand_resid_s2), length.out = 100),
   y = dnorm(seq(min(df_secondary$stand_resid_s2), max(df_secondary$stand_resid_s2), length.out = 100)),
   type = "Normal Distribution"
 )
 
-# s3
-s3_density <- data.frame(
-  x = density(df_secondary$stand_resid_s3)$x,
-  y = density(df_secondary$stand_resid_s3)$y,
-  type = "Empirical Density"
-)
 s3_normal <- data.frame(
   x = seq(min(df_secondary$stand_resid_s3), max(df_secondary$stand_resid_s3), length.out = 100),
   y = dnorm(seq(min(df_secondary$stand_resid_s3), max(df_secondary$stand_resid_s3), length.out = 100)),
   type = "Normal Distribution"
 )
+```
 
-
-# =========================================
-# 2.4.1 Model S1: Normality Check
-# =========================================
-
-## S1: Histogram
+Visualization
+```{r}
+#S1
 s1_lines <- rbind(s1_density, s1_normal)
 
 s1_hist <- ggplot(df_secondary, aes(x = stand_resid_s1)) +
-  geom_histogram(aes(y = ..density..), fill = "grey", color = "black", binwidth = 0.25) +
+  geom_histogram(aes(y = ..density..), fill = "grey", color = "#000000", binwidth = 0.25) +
   geom_line(data = s1_lines, aes(x = x, y = y, color = type), linewidth = 1) +
-  scale_color_manual(name = "Line Type", values = c("Empirical Density" = "#CC79A7", "Normal Distribution" = "#F0E442")) +
+  scale_color_manual(name = "Line Type", 
+                     values = c("Empirical Density" = "#CC79A7", 
+                                "Normal Distribution" = "#F0E442")) +
   labs(title = "", x = "", y = "") +
   theme_minimal() +
-  theme(legend.title = element_text(hjust = 0.5))
+ theme(legend.title = element_text(hjust = 0.5)) 
 s1_hist
 
-## S1: QQ-Plot
 df_secondary$theoretical_quantiles_s1 <- qqnorm(df_secondary$stand_resid_s1, plot.it = FALSE)$x
 
 s1_qq <- ggplot(df_secondary, aes(x = theoretical_quantiles_s1, y = stand_resid_s1, color = gr)) +
   geom_jitter(width = 0.3, height = 0, size = 1.5, alpha = 0.7) +
   geom_abline(intercept = mean(df_secondary$stand_resid_s1), slope = sd(df_secondary$stand_resid_s1), color = "#CC79A7", linewidth = 1) +
-  scale_color_manual(values = c("20Hz_online_exp" = "#0072B2", "20Hz_online_sham" = "#D55E00")) +
+  scale_color_manual(
+    values = c("20Hz_online_exp" = "#0072B2", 
+               "20Hz_online_sham" = "#D55E00"),
+    labels = c("experimental", "control"),
+    name = "Group"
+  ) +
   labs(title = "", x = "", y = "") +
   theme_minimal() +
-  theme(legend.title = element_text(hjust = 0.5))
+ theme(legend.title = element_text(hjust = 0.5)) 
 s1_qq
 
-## S1: Normality Tests
+#S2
+s2_lines <- rbind(s2_density, s2_normal)
+
+s2_hist <- ggplot(df_secondary, aes(x = stand_resid_s2)) +
+  geom_histogram(aes(y = ..density..), fill = "grey", color = "#000000", binwidth = 0.25) +
+  geom_line(data = s2_lines, aes(x = x, y = y, color = type), linewidth = 1) +
+  scale_color_manual(name = "Line Type", 
+                     values = c("Empirical Density" = "#CC79A7", 
+                                "Normal Distribution" = "#F0E442")) +
+  labs(title = "", x = "", y = "") +
+  theme_minimal() +
+ theme(legend.title = element_text(hjust = 0.5)) 
+s2_hist
+
+df_secondary$theoretical_quantiles_s2 <- qqnorm(df_secondary$stand_resid_s2, plot.it = FALSE)$x
+
+s2_qq <- ggplot(df_secondary, aes(x = theoretical_quantiles_s2, y = stand_resid_s2, color = gr)) +
+  geom_jitter(width = 0.3, height = 0, size = 1.5, alpha = 0.7) +
+  geom_abline(intercept = mean(df_secondary$stand_resid_s2), slope = sd(df_secondary$stand_resid_s2), color = "#CC79A7", linewidth = 1) +
+scale_color_manual(
+    values = c("20Hz_online_exp" = "#0072B2", 
+               "20Hz_online_sham" = "#D55E00"),
+    labels = c("experimental", "control"),
+    name = "Group"
+  ) +  labs(title = "", x = "", y = "") +
+  theme_minimal() +
+ theme(legend.title = element_text(hjust = 0.5)) 
+s2_qq
+
+#S3
+s3_lines <- rbind(s3_density, s3_normal)
+
+s3_hist <- ggplot(df_secondary, aes(x = stand_resid_s3)) +
+  geom_histogram(aes(y = ..density..), fill = "grey", color = "#000000", binwidth = 0.25) +
+  geom_line(data = s3_lines, aes(x = x, y = y, color = type), linewidth = 1) +
+  scale_color_manual(name = "Line Type", 
+                     values = c("Empirical Density" = "#CC79A7", 
+                                "Normal Distribution" = "#F0E442")) +
+  labs(title = "", x = "", y = "") +
+  theme_minimal() +
+ theme(legend.title = element_text(hjust = 0.5)) 
+s3_hist
+
+df_secondary$theoretical_quantiles_s3 <- qqnorm(df_secondary$stand_resid_s3, plot.it = FALSE)$x
+
+s3_qq <- ggplot(df_secondary, aes(x = theoretical_quantiles_s3, y = stand_resid_s3, color = gr)) +
+  geom_jitter(width = 0.3, height = 0, size = 1.5, alpha = 0.7) +
+  geom_abline(intercept = mean(df_secondary$stand_resid_s3), slope = sd(df_secondary$stand_resid_s3), color = "#CC79A7", linewidth = 1) +
+scale_color_manual(
+    values = c("20Hz_online_exp" = "#0072B2", 
+               "20Hz_online_sham" = "#D55E00"),
+    labels = c("experimental", "control"),
+    name = "Group"
+  ) +  labs(title = "", x = "", y = "") +
+  theme_minimal() +
+ theme(legend.title = element_text(hjust = 0.5)) 
+s3_qq
+
+```
+
+quantification
+```{r}
+#S1
 shapiro_residuals_s1 <- shapiro.test(df_secondary$resid_s1)
 ad_residuals_s1 <- ad.test(df_secondary$resid_s1)
 
@@ -291,36 +390,7 @@ print(shapiro_residuals_s1)
 cat("\nAnderson-Darling Test:\n")
 print(ad_residuals_s1)
 
-
-# =========================================
-# 2.4.2 Model S2: Normality Check
-# =========================================
-
-## S2: Histogram
-s2_lines <- rbind(s2_density, s2_normal)
-
-s2_hist <- ggplot(df_secondary, aes(x = stand_resid_s2)) +
-  geom_histogram(aes(y = ..density..), fill = "grey", color = "black", binwidth = 0.25) +
-  geom_line(data = s2_lines, aes(x = x, y = y, color = type), linewidth = 1) +
-  scale_color_manual(name = "Line Type", values = c("Empirical Density" = "#CC79A7", "Normal Distribution" = "#F0E442")) +
-  labs(title = "", x = "", y = "") +
-  theme_minimal() +
-  theme(legend.title = element_text(hjust = 0.5))
-s2_hist
-
-## S2: QQ-Plot
-df_secondary$theoretical_quantiles_s2 <- qqnorm(df_secondary$stand_resid_s2, plot.it = FALSE)$x
-
-s2_qq <- ggplot(df_secondary, aes(x = theoretical_quantiles_s2, y = stand_resid_s2, color = gr)) +
-  geom_jitter(width = 0.3, height = 0, size = 1.5, alpha = 0.7) +
-  geom_abline(intercept = mean(df_secondary$stand_resid_s2), slope = sd(df_secondary$stand_resid_s2), color = "#CC79A7", linewidth = 1) +
-  scale_color_manual(values = c("20Hz_online_exp" = "#0072B2", "20Hz_online_sham" = "#D55E00")) +
-  labs(title = "", x = "", y = "") +
-  theme_minimal() +
-  theme(legend.title = element_text(hjust = 0.5))
-s2_qq
-
-## S2: Normality Tests
+#S2
 shapiro_residuals_s2 <- shapiro.test(df_secondary$resid_s2)
 ad_residuals_s2 <- ad.test(df_secondary$resid_s2)
 
@@ -331,36 +401,7 @@ print(shapiro_residuals_s2)
 cat("\nAnderson-Darling Test:\n")
 print(ad_residuals_s2)
 
-
-# =========================================
-# 2.4.3 Model S3: Normality Check
-# =========================================
-
-## S3: Histogram
-s3_lines <- rbind(s3_density, s3_normal)
-
-s3_hist <- ggplot(df_secondary, aes(x = stand_resid_s3)) +
-  geom_histogram(aes(y = ..density..), fill = "grey", color = "black", binwidth = 0.25) +
-  geom_line(data = s3_lines, aes(x = x, y = y, color = type), linewidth = 1) +
-  scale_color_manual(name = "Line Type", values = c("Empirical Density" = "#CC79A7", "Normal Distribution" = "#F0E442")) +
-  labs(title = "", x = "", y = "") +
-  theme_minimal() +
-  theme(legend.title = element_text(hjust = 0.5))
-s3_hist
-
-## S3: QQ-Plot
-df_secondary$theoretical_quantiles_s3 <- qqnorm(df_secondary$stand_resid_s3, plot.it = FALSE)$x
-
-s3_qq <- ggplot(df_secondary, aes(x = theoretical_quantiles_s3, y = stand_resid_s3, color = gr)) +
-  geom_jitter(width = 0.3, height = 0, size = 1.5, alpha = 0.7) +
-  geom_abline(intercept = mean(df_secondary$stand_resid_s3), slope = sd(df_secondary$stand_resid_s3), color = "#CC79A7", linewidth = 1) +
-  scale_color_manual(values = c("20Hz_online_exp" = "#0072B2", "20Hz_online_sham" = "#D55E00")) +
-  labs(title = "", x = "", y = "") +
-  theme_minimal() +
-  theme(legend.title = element_text(hjust = 0.5))
-s3_qq
-
-## S3: Normality Tests
+#S3
 shapiro_residuals_s3 <- shapiro.test(df_secondary$resid_s3)
 ad_residuals_s3 <- ad.test(df_secondary$resid_s3)
 
@@ -370,24 +411,18 @@ cat("\nShapiro-Wilk Test:\n")
 print(shapiro_residuals_s3)
 cat("\nAnderson-Darling Test:\n")
 print(ad_residuals_s3)
+```
 
-# =========================================
-# 2.5 Variance Homogeneity
-# =========================================
-
-## 2.5.1 Visualization for Model S1
-
-# Fitted Values and Residuals
+2.5 Variance homogeneity
+visualization
+```{r}
+#S1
 df_secondary$fitted_s1 <- fitted(s1)
-
-# Global linear fit (optional, not used in plot)
 global_fit_s1 <- lm(resid(s1) ~ fitted(s1))
 
-# Adding jitter to fitted values for visualization
 set.seed(123)
 df_secondary$fitted_jit_s1 <- df_secondary$fitted_s1 + runif(nrow(df_secondary), -8, 8)
 
-# Creating intervals
 df_secondary$interval_s1 <- cut(
   df_secondary$fitted_s1,
   breaks = c(-200, -70, -30, 30, 70, 180),
@@ -395,7 +430,6 @@ df_secondary$interval_s1 <- cut(
   right = FALSE
 )
 
-# Plot for model s1
 s1_var <- ggplot(df_secondary, aes(x = fitted_jit_s1, y = stand_resid_s1, color = gr)) +
   geom_segment(aes(x = fitted_jit_s1, xend = fitted_jit_s1, y = stand_resid_s1, yend = 0),
                color = "#009E73", linewidth = 0.1, alpha = 0.7) +
@@ -409,25 +443,21 @@ s1_var <- ggplot(df_secondary, aes(x = fitted_jit_s1, y = stand_resid_s1, color 
   ) +
   scale_linetype_manual(
     values = c("No Deviation" = "solid"),
-    name = "Linetype"
+    name = "Linetype"  
   ) +
   labs(title = "", x = "", y = "") +
   theme_minimal() +
-  theme(legend.title = element_text(hjust = 0.5))
+ theme(legend.title = element_text(hjust = 0.5)) 
 s1_var
 
 
-## 2.5.2 Visualization for Model S2
-
-# Fitted Values
+#S2
 df_secondary$fitted_s2 <- fitted(s2)
 global_fit_s2 <- lm(resid(s2) ~ fitted(s2))
 
-# Jitter
 set.seed(123)
 df_secondary$fitted_jit_s2 <- df_secondary$fitted_s2 + runif(nrow(df_secondary), -8, 8)
 
-# Intervals
 df_secondary$interval_s2 <- cut(
   df_secondary$fitted_s2,
   breaks = c(-200, -70, -30, 30, 70, 180),
@@ -435,7 +465,6 @@ df_secondary$interval_s2 <- cut(
   right = FALSE
 )
 
-# Plot for model s2
 s2_var <- ggplot(df_secondary, aes(x = fitted_jit_s2, y = stand_resid_s2, color = gr)) +
   geom_segment(aes(x = fitted_jit_s2, xend = fitted_jit_s2, y = stand_resid_s2, yend = 0),
                color = "#009E73", linewidth = 0.1, alpha = 0.7) +
@@ -449,25 +478,20 @@ s2_var <- ggplot(df_secondary, aes(x = fitted_jit_s2, y = stand_resid_s2, color 
   ) +
   scale_linetype_manual(
     values = c("No Deviation" = "solid"),
-    name = "Linetype"
+    name = "Linetype"  
   ) +
   labs(title = "", x = "", y = "") +
-  theme_minimal() +
-  theme(legend.title = element_text(hjust = 0.5))
+   theme_minimal() +
+  theme(legend.title = element_text(hjust = 0.5)) 
 s2_var
 
-
-## 2.5.3 Visualization for Model S3
-
-# Fitted Values
+#S3
 df_secondary$fitted_s3 <- fitted(s3)
-global_fit_s3 <- lm(resid(s3) ~ fitted(s3))
+global_fit_s3 <- lm(resid(s2) ~ fitted(s3))
 
-# Jitter
 set.seed(123)
 df_secondary$fitted_jit_s3 <- df_secondary$fitted_s3 + runif(nrow(df_secondary), -8, 8)
 
-# Intervals
 df_secondary$interval_s3 <- cut(
   df_secondary$fitted_s3,
   breaks = c(-200, -70, -30, 30, 70, 180),
@@ -475,7 +499,6 @@ df_secondary$interval_s3 <- cut(
   right = FALSE
 )
 
-# Plot for model s3
 s3_var <- ggplot(df_secondary, aes(x = fitted_jit_s3, y = stand_resid_s3, color = gr)) +
   geom_segment(aes(x = fitted_jit_s3, xend = fitted_jit_s3, y = stand_resid_s3, yend = 0),
                color = "#009E73", linewidth = 0.1, alpha = 0.7) +
@@ -489,33 +512,29 @@ s3_var <- ggplot(df_secondary, aes(x = fitted_jit_s3, y = stand_resid_s3, color 
   ) +
   scale_linetype_manual(
     values = c("No Deviation" = "solid"),
-    name = "Linetype"
+    name = "Linetype"  
   ) +
   labs(title = "", x = "", y = "") +
   theme_minimal() +
-  theme(legend.title = element_text(hjust = 0.5))
+  theme(legend.title = element_text(hjust = 0.5)) 
 s3_var
 
+```
 
-## 2.5.4 Quantification of Variance Homogeneity
-
-# Breusch-Pagan-type tests
+quantification
+```{r}
 bp_s1 <- check_heteroscedasticity(s1)
 bp_s2 <- check_heteroscedasticity(s2)
 bp_s3 <- check_heteroscedasticity(s3)
 
-# Output
 print(bp_s1)
 print(bp_s2)
 print(bp_s3)
+```
 
-
-# =========================================
-# 3 Inferential Analysis
-# =========================================
-
-# 3.1 Model Fit Comparison: AIC and BIC
-
+3. Inferential Analysis
+3.1 Model Fit
+```{r}
 model_list_sec <- list(s1, s2, s3)
 model_names_sec <- c("S1", "S2", "S3")
 
@@ -527,27 +546,46 @@ model_comparison_sec <- data.frame(
 
 print(model_comparison_sec)
 
-# =========================================
-# 3.2 Model Results
-# =========================================
+```
 
-## 3.2.1 Results S1
-
-# Modell S1 schätzen
+3.2 Model Results S1
+linear mixed model results
+```{r}
 s1 <- lmer(val ~ gr * val_cat + (1|subj), data = df_secondary)
-
-# Klassische Auswertung
 summary(s1)
 model_parameters(s1, ci = 0.95)
+```
 
-# Robuste Inferenz für Modell S1
+robust results with CR2 confidence intervals
+```{r}
+compute_cr2_ci <- function(model, cluster_var, level = 0.95) {
+  test <- coef_test(model, vcov = "CR2", cluster = cluster_var)
+  
+  alpha <- 1 - level
+  t_crit <- qt(1 - alpha/2, df = test$df)
+  
+  ci_lower <- test$beta - t_crit * test$SE
+  ci_upper <- test$beta + t_crit * test$SE
+  
+  result <- data.frame(
+    Predictor = rownames(test),
+    Estimate = round(test$beta, 4),
+    SE_robust = round(test$SE, 4),
+    df = round(test$df, 2),
+    t = round(test$tstat, 3),
+    p = round(test$p_Satt, 4),
+    CI_lower = round(ci_lower, 4),
+    CI_upper = round(ci_upper, 4)
+  )
+  
+  return(result)
+}
 inference_s1_with_ci <- compute_cr2_ci(s1, df_secondary$subj)
+kable(inference_s1_with_ci, caption = "Robust inference with 95% confidence intervals – Model s1")
+```
 
-# Ausgabe robuste Schätzungen für S1
-library(knitr)
-kable(inference_s1_with_ci, caption = "Robust inference with 95% confidence intervals – Model S1")
-
-# Effektgrößen mit Bootstrapping
+bootstrapped effect sizes
+```{r}
 boot_r2_function <- function(model) {
   r2beta(model, method = "nsj")$Rsq
 }
@@ -566,24 +604,27 @@ boot_s1_summary <- data.frame(
 )
 
 print(boot_s1_summary)
+```
 
 
-## 3.2.2 Results S2
-
-# Modell S2 schätzen
+3.3 Model Results S2
+linear mixed model results
+```{r}
 s2 <- lmer(val ~ gr * val_cat + age + sex + (1|subj), data = df_secondary)
-
-# Klassische Auswertung
-summary(s2)
 model_parameters(s2, ci = 0.95)
+summary(s2)
+confint(s2, method = "profile")
+```
 
-# Robuste Inferenz für Modell S2
+robust results with CR2 confidence intervals
+```{r}
 inference_s2_with_ci <- compute_cr2_ci(s2, df_secondary$subj)
 
-# Ausgabe robuste Schätzungen für S2
-kable(inference_s2_with_ci, caption = "Robust inference with 95% confidence intervals – Model S2")
+kable(inference_s2_with_ci, caption = "Robust inference with 95% confidence intervals – Model s2")
+```
 
-# Effektgrößen mit Bootstrapping
+bootstrapped effect sizes
+```{r}
 set.seed(123)
 boot_s2_results <- bootMer(s2, FUN = boot_r2_function, nsim = 1000, use.u = TRUE, type = "parametric")
 
@@ -598,11 +639,14 @@ boot_s2_summary <- data.frame(
 )
 
 print(boot_s2_summary)
+```
 
-# Plotting: robustes Interaction Plot für S2
+Interaction plot with robust CR2 confidence intervals
+```{r}
 vcov_s2_cr2 <- vcovCR(s2, cluster = df_secondary$subj, type = "CR2")
 
 emm_s2_robust <- emmeans(s2, ~ gr * val_cat, vcov. = vcov_s2_cr2)
+
 emm_df_s2_robust <- as.data.frame(emm_s2_robust)
 
 plot_s2_robust <- ggplot(emm_df_s2_robust, aes(x = val_cat, y = emmean, color = gr, group = gr)) +
@@ -615,11 +659,16 @@ plot_s2_robust <- ggplot(emm_df_s2_robust, aes(x = val_cat, y = emmean, color = 
   ) +
   scale_x_discrete(labels = c("neg" = "Negative", "neu" = "Neutral", "pos" = "Positive")) +
   scale_color_manual(
-    values = c("20Hz_online_exp" = "#0072B2", "20Hz_online_sham" = "#D55E00"),
+    values = c("20Hz_online_exp" = "#0072B2", 
+               "20Hz_online_sham" = "#D55E00"),
     labels = c("experimental", "control"),
     name = "Group"
   ) +
-  labs(title = "", x = "", y = "") +
+  labs(
+    title = "",
+    x = "",
+    y = ""
+  ) +
   theme_minimal() +
   theme(
     plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
@@ -629,26 +678,27 @@ plot_s2_robust <- ggplot(emm_df_s2_robust, aes(x = val_cat, y = emmean, color = 
     legend.text = element_text(size = 10)
   )
 
-# Plot anzeigen
 print(plot_s2_robust)
+```
 
-
-## 3.2.3 Results S3
-
-# Modell S3 schätzen
+3.4 Model Results S3
+linear mixed model results
+```{r}
 s3 <- lmer(val ~ gr * val_cat + age + sex + rMT + (1|subj), data = df_secondary)
-
-# Klassische Auswertung
 summary(s3)
 model_parameters(s3, ci = 0.95)
+```
 
-# Robuste Inferenz für Modell S3
+robust results with CR2 confidence intervals
+```{r}
 inference_s3_with_ci <- compute_cr2_ci(s3, df_secondary$subj)
 
-# Ausgabe robuste Schätzungen für S3
-kable(inference_s3_with_ci, caption = "Robust inference with 95% confidence intervals – Model S3")
+kable(inference_s3_with_ci, caption = "Robust inference with 95% confidence intervals – Model s3")
 
-# Effektgrößen mit Bootstrapping
+```
+
+bootstrapped effect sizes
+```{r}
 set.seed(123)
 boot_s3_results <- bootMer(s3, FUN = boot_r2_function, nsim = 1000, use.u = TRUE, type = "parametric")
 
@@ -663,3 +713,4 @@ boot_s3_summary <- data.frame(
 )
 
 print(boot_s3_summary)
+```
