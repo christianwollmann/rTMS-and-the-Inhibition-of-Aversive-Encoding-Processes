@@ -15,7 +15,7 @@ output:
 library(dplyr)
 
 # Load raw data
-load("Merged_data_SAMEP_Phase5_20250212.Rda")
+load("study_data.Rda")
 
 # Filter for 20Hz online groups
 df_20hz <- memory %>%
